@@ -1,0 +1,21 @@
+---
+- xpath: /AMER
+  type: NT_ST_NETAPP_VFILER
+  attr: test
+  value: test
+  listindex: 0
+  owner: gen.dco
+
+- xpath: /AMER/SJC01
+  type: NT_ST_NETAPP_VFILER
+  attr: test
+  value: test
+  listindex: 0
+  owner: gen.dco
+
+- xpath: /AMER/SJC02
+  type: NT_ST_NETAPP_VFILER
+  attr: test
+  value: test
+  listindex: 0
+  owner: gen.dco
