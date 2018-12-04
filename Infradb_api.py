@@ -4,7 +4,9 @@ import yaml
 from jinja2 import Template
 import enum
 import base64
-
+# This infradb_api module is used to feed data to table "table_pub_node" in Hasura for teams
+# created by yiqdeng
+# update time: 2018.12.4
 
 ACCOUNT_Template = Template('{{username}}:{{password}}')
 
@@ -61,7 +63,7 @@ class Session(object):
         account = ACCOUNT_Template.render(username=self.username, password=self.password)
         authorization = base64.b64encode(bytes(account, encoding='utf-8'))
         hasura_post_headers = {"Authorization": authorization,
-                               "Content-Type":"application/json"}
+                               "Content-Type": "application/json"}
         post_args = {
             'headers': hasura_post_headers,
             'json': {'query': query}
@@ -76,18 +78,19 @@ class Session(object):
         query = NODE_UPSERT_TEMPLATE.render(DataList=DataList)
         LOGGER.debug(query)
         self._post_graphql(query)
+        # add  decorate here  to check status
 
-    def _trunk(self,listTemp, n):
+    def _trunk(self, listTemp, n):
         for i in range(0, len(listTemp), n):
             yield listTemp[i:i + n]
 
-    def upsert_node(self,filepath):
+    def upsert_node_yaml(self,filepath,length):
         with open(filepath) as stream:
             try:
                 parsed_yaml = yaml.load(stream)
-                temp = self._trunk(parsed_yaml,10000)
+                temp = self._trunk(parsed_yaml,length)
                 for item in temp:
-                    DataList = ''
+                    datalist = ''
                     for node in item:
                         xpath = node[YAMLKeys.NODE_XPATH_KEY.value]
                         type = node[YAMLKeys.NODE_TYPE_KEY.value]
@@ -95,12 +98,17 @@ class Session(object):
                         value = node[YAMLKeys.NODE_VALUE_KEY.value] if YAMLKeys.NODE_VALUE_KEY.value in node else ""
                         listindex = node[YAMLKeys.NODE_LISTINDEX_KEY.value]
                         owner = node[YAMLKeys.NODE_OWNER_KEY.value]
-                        DataItem = DataItem_Template.render(xpath=xpath,type=type,attr=attr,value=value,listindex=listindex,
+                        dataitem = DataItem_Template.render(xpath=xpath,type=type,attr=attr,value=value,listindex=listindex,
                                                             owner=owner)
-                        DataList = DataItem + DataList
-                    self._upsert_item(DataList=DataList)
-            except yaml.YAMLError as yerr:
-                LOGGER.error("Unable to parse the schema yaml{}".format(yerr))
+                        datalist = dataitem + datalist
+
+                    self._upsert_item(DataList=datalist)
+            except Exception as err:
+                LOGGER.error(err)
+                query = Transaction_Status_Template(owner=self.owner, status_start="false", status_end="false")
+                r = self._post_graphql(query=query)
+                LOGGER.debug(r)
+                return r.json()
 
     def query_nodes(self,graphql_query):
         r = self._post_graphql(query=graphql_query)
@@ -108,24 +116,61 @@ class Session(object):
         return r.json()
 
     def start_transaction(self):
-        query = Transaction_Status_Template.render(owner=self.owner,status_start="true",status_end="false")
+        query = Transaction_Status_Template.render(owner=self.owner, status_start="true", status_end="false")
         r = self._post_graphql(query=query)
         LOGGER.debug(r)
         return r.json()
 
     def end_transaction(self):
-        query = Transaction_Status_Template.render(owner=self.owner,status_start="false", status_end="true")
+        query = Transaction_Status_Template.render(owner=self.owner, status_start="false", status_end="true")
         r = self._post_graphql(query=query)
         LOGGER.debug(r)
         return r.json()
 
+    def upsert_node_list(self, pylist, length):
+            try:
+                temp = self._trunk(pylist, length)
+
+                for item in temp:
+                    datalist = ''
+                    for node in item:
+                        xpath = node[YAMLKeys.NODE_XPATH_KEY.value]
+                        type = node[YAMLKeys.NODE_TYPE_KEY.value]
+                        attr = node[YAMLKeys.NODE_ATTR_KEY.value] if YAMLKeys.NODE_ATTR_KEY.value in node else ""
+                        value = node[YAMLKeys.NODE_VALUE_KEY.value] if YAMLKeys.NODE_VALUE_KEY.value in node else ""
+                        listindex = node[YAMLKeys.NODE_LISTINDEX_KEY.value]
+                        owner = node[YAMLKeys.NODE_OWNER_KEY.value]
+                        dataitem = DataItem_Template.render(xpath=xpath,type=type,attr=attr,value=value,
+                                                            listindex=listindex, owner=owner)
+                        datalist = dataitem + datalist
+                    self._upsert_item(DataList= datalist)
+            except Exception as err:
+                LOGGER.error(err)
+                query = Transaction_Status_Template.render(owner=self.owner, status_start="false", status_end="false")
+                r = self._post_graphql(query=query)
+                LOGGER.debug(r)
+                return r.json()
+
 
 # if __name__ == '__main__':
-#     session = Session(username="hasura-dco.gen", password="cH4&p0W5t",
+# Initial the Class
+#     session = Session(username="hasura-dco.gen", password="xxxxxxx",
 #                       url='https://csg-hasura-stage.webex.com/v1alpha1/graphql',owner="gen.dco")
 #
-#     #session.start_transaction()
-#     #session.upsert_node(filepath=r"C:\Users\yiqdeng\infradb-schema-creator\PUBNODE")
+#     pylist = [{'xpath': '/AMER', 'type': 'NT_ST_NETAPP_VFILER', 'attr': 'test', 'value': 'test2', 'listindex': 0,
+#       'owner': 'gen.dco'},
+#      {'xpath': '/AMER/SJC01', 'type': 'NT_ST_NETAPP_VFILER', 'attr': 'test', 'value': 'test1', 'listindex': 0,
+#       'owner': 'gen.dco'},
+#      {'xpath': '/AMER/SJC02', 'type': 'NT_ST_NETAPP_VFILER', 'attr': 'test', 'value': 'test3', 'listindex': 0,
+#       'owner': 'gen.dco'}]
+# Import data from python list,length must < 10000
+#     session.start_transaction()
+#     session.upsert_node_list(pylist=pylist,length=8000)
+#     session.end_transaction()
+
+# Import data  from  yaml file,length must < 10000
+#     session.start_transaction()
+#     session.upsert_node_yaml(filepath="......",length=8000)
 #     session.end_transaction()
 
 
