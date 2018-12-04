@@ -22,6 +22,19 @@ mutation upsert_node {
 DataItem_Template = Template('''{ xpath: "{{ xpath }}", type: "{{ type }}", 
                             attr: "{{ attr }}",value: "{{ value }}",listindex:"{{ listindex }}",owner:"{{ owner }}"}''')
 
+Transaction_Status_Template = Template('''
+mutation updateTaskStatus{
+update_table_pub_taskstatus(
+where:{owner:{_eq:"{{ owner }}"}},
+_set:{status_start:{{ status_start }},status_end:{{ status_end }}}
+){
+affected_rows
+returning{
+starttime
+}
+}
+}''')
+
 
 class YAMLKeys(enum.Enum):
     NODE_XPATH_KEY = "xpath"
@@ -38,10 +51,11 @@ LOGGER.setLevel(logging.DEBUG)
 
 
 class Session(object):
-    def __init__(self,username,password,url):
+    def __init__(self,username,password,url,owner):
         self.username = username
         self.password = password
         self.url = url
+        self.owner = owner
 
     def _post_graphql(self, query):
         account = ACCOUNT_Template.render(username=self.username, password=self.password)
@@ -93,20 +107,27 @@ class Session(object):
         LOGGER.debug(r)
         return r.json()
 
+    def start_transaction(self):
+        query = Transaction_Status_Template.render(owner=self.owner,status_start="true",status_end="false")
+        r = self._post_graphql(query=query)
+        LOGGER.debug(r)
+        return r.json()
+
+    def end_transaction(self):
+        query = Transaction_Status_Template.render(owner=self.owner,status_start="false", status_end="true")
+        r = self._post_graphql(query=query)
+        LOGGER.debug(r)
+        return r.json()
+
 
 # if __name__ == '__main__':
 #     session = Session(username="hasura-dco.gen", password="cH4&p0W5t",
-#                       url='https://csg-hasura-stage.webex.com/v1alpha1/graphql')
-#     session.upsert_node(filepath=r"C:\Users\yiqdeng\infradb-schema-creator\PUBNODE")
+#                       url='https://csg-hasura-stage.webex.com/v1alpha1/graphql',owner="gen.dco")
 #
-#     query = '''query{
-#   table_pub_taskstatus{
-#     id
-#     owner
-#     status
-#   }
-# }'''
-#     print(session.query_nodes(query))
+#     #session.start_transaction()
+#     #session.upsert_node(filepath=r"C:\Users\yiqdeng\infradb-schema-creator\PUBNODE")
+#     session.end_transaction()
+
 
 
 
