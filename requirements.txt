@@ -4,7 +4,7 @@ Click==7.0
 gql==0.1.0
 graphql-core==2.1
 idna==2.7
-Jinja2==2.10
+Jinja2==2.11.3
 MarkupSafe==1.1.0
 promise==2.2.1
 PyYAML==3.13
